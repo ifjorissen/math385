@@ -192,7 +192,7 @@ def main(argc, argv):
 		facets = []
 		points = []
 
-		cube = open('sphere.obj')
+		cube = open('torus.obj')
 		for line in cube:
 			if line.startswith('v'):
 				pf = []
