@@ -7,7 +7,7 @@ from objects import facet, color
 from random import random
 from math import sin, cos, acos, pi, sqrt
 
-def genCubePoints():
+def genCube():
 	size = 2
 	points = [[0,0,0],
 						[0, 1*size, 0], 
@@ -18,10 +18,8 @@ def genCubePoints():
 						[1*size, 1*size, 1*size],
 						[0, 1*size, 1*size]
 	]
-	return points;
 
-def genCubeFacets():
-	#back face
+		#back face
 	facets = [[0, 1, 3],
 						[0, 2, 3], #back face
 						[0, 1, 7],
@@ -35,10 +33,11 @@ def genCubeFacets():
 						[6, 4, 7],
 						[6, 4, 5]  #front
 	]
-	return facets
 
-def genSphere():
-	smoothness = 10
+	return points, facets;
+
+def genSphere(smooth):
+	smoothness = smooth
 	radius = 2
 	numPoints = 2*pi/smoothness
 	points=[]
@@ -95,10 +94,10 @@ def genSphere():
 
 	return points, facets
 
-def genTorus():
+def genTorus(smooth):
 	innerR = 1
 	outerR = 3
-	smoothness = 10
+	smoothness = smooth
 	numPoints = 2*pi/smoothness
 	points=[]
 	facets=[]
@@ -146,8 +145,8 @@ def genTorus():
 	return points, facets
 
 
-def genCylinder():
-	smoothness = 10
+def genCylinder(smooth):
+	smoothness = smooth
 	radius = 2
 	height = 5
 	numPoints = 2*pi/smoothness
@@ -192,88 +191,93 @@ def genCylinder():
 
 	return points, facets
 
-def writeTorus():
-		torus = open('torus.obj', 'w')
-		torus.truncate()
+#shape handler function
+def genShape(s, smoothness):
+	facets = []
+	points = []
+	res = []
+	if s == "cylinder":
+		res = genCylinder(smoothness)
+	elif s == "torus":
+		res = genTorus(smoothness)
+	elif s == "sphere":
+		res = genSphere(smoothness)
+	elif s == "cube":
+		res = genCube()
 
-		res =  genTorus()
-		points = res[0]
-		facets = res[1]
+	points = res[0]
+	facets = res[1] 
 
-		print ("I'm going to write these to the file.")
-		for point in points:
-			p = 'v {: f} {: f} {: f}\n'.format(point[0], point[1], point[2])
-			torus.write(p)
-		torus.write("\n")
-		for facet in facets:
-			f = 'f {} {} {}\n'.format(facet[0], facet[1], facet[2])
-			torus.write(f)
-
-		torus.close()
-
-def writeCylinder():
-		cylinder = open('cylinder.obj', 'w')
-		cylinder.truncate()
-
-		res =  genCylinder()
-		points = res[0]
-		facets = res[1]
-
-		print ("I'm going to write these to the file.")
-		for point in points:
-			p = 'v {: f} {: f} {: f}\n'.format(point[0], point[1], point[2])
-			cylinder.write(p)
-		cylinder.write("\n")
-		for facet in facets:
-			f = 'f {} {} {}\n'.format(facet[0], facet[1], facet[2])
-			cylinder.write(f)
-
-		cylinder.close()
+	return points, facets
 
 
-def writeCube():
-	cube = open('cube.obj', 'w')
-	cube.truncate()
+#this function writes an object's points and facets to a .obj file
+#the file name output is <shape><smoothness>.obj
+def writeObj(shape, smoothness=10):
+	points = []
+	facets = []
 
-	points = genCubePoints()
-	facets = genCubeFacets()
+	fileName = str(shape) + str(smoothness) + ".obj" 
+	shapeFile = open(fileName, 'w')
 
-	print ("I'm going to write these to the file.")
-	for point in points:
-		p = 'v {: f} {: f} {: f}\n'.format(point[0], point[1], point[2])
-		cube.write(p)
-	cube.write("\n")
-	for facet in facets:
-		f = 'f {} {} {}\n'.format(facet[0], facet[1], facet[2])
-		cube.write(f)
+	shapeFile.truncate()
 
-	cube.close()
-
-
-def writeSphere():
-	sphere = open('sphere.obj', 'w')
-	sphere.truncate()
-
-	res =  genSphere()
+	res = genShape(shape, int(smoothness))
 	points = res[0]
 	facets = res[1]
 
 	print ("I'm going to write these to the file.")
+	info = "\t#" + fileName + "\n\t#Smoothness: " + str(smoothness) + "\n\n"
+	shapeFile.write(info)
 	for point in points:
 		p = 'v {: f} {: f} {: f}\n'.format(point[0], point[1], point[2])
-		sphere.write(p)
-	sphere.write("\n")
+		shapeFile.write(p)
+	shapeFile.write("\n")
 	for facet in facets:
 		f = 'f {} {} {}\n'.format(facet[0], facet[1], facet[2])
-		sphere.write(f)
+		shapeFile.write(f)
 
-	sphere.close()
+	shapeFile.close()
+
+def readObjFile(s):
+	facets = []
+	points = []
+
+	#parse the file (very minimal)
+	objFile = open(s)
+	for line in objFile:
+		if line.startswith('v'):
+			pf = []
+			pstr = line.split()
+			pstr.pop(0)
+			for p in pstr:
+				pf.append(float(p))
+			points.append(point(pf[0], pf[1], pf[2]))
+		elif line.startswith('f'):
+			pts = []
+			fstr = line.split()
+			fstr.pop(0)
+			for f in fstr:
+				fint = int(f)-1 #account for the fact that facets start at 1, not 0
+				pts.append(points[fint])
+
+			c = color(random(), random(), random())
+
+			face = facet(pts[0], pts[1], pts[2], c)
+			facets.append(face)
+
+		elif line.startswith('#'): continue
+		else: continue 
+	objFile.close()
+	return facets
+
 
 def main(argc, argv):
-	writeCube()
-	writeSphere()
-	writeCylinder()
-	writeTorus()
+	#write some generic objects to test .obj file formats
+	writeObj("cylinder", 15)
+	writeObj("cube")
+	writeObj("sphere", 15)
+	writeObj("torus", 15)
 
 
 
