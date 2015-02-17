@@ -1,5 +1,3 @@
-
-
 import sys
 from geometry import point, vector, EPSILON, ORIGIN
 from quat import quat
@@ -239,44 +237,11 @@ def writeObj(shape, smoothness=10):
 
 	shapeFile.close()
 
-def readObjFile(s):
-	facets = []
-	points = []
-
-	#parse the file (very minimal)
-	objFile = open(s)
-	for line in objFile:
-		if line.startswith('v'):
-			pf = []
-			pstr = line.split()
-			pstr.pop(0)
-			for p in pstr:
-				pf.append(float(p))
-			points.append(point(pf[0], pf[1], pf[2]))
-		elif line.startswith('f'):
-			pts = []
-			fstr = line.split()
-			fstr.pop(0)
-			for f in fstr:
-				fint = int(f)-1 #account for the fact that facets start at 1, not 0
-				pts.append(points[fint])
-
-			c = color(random(), random(), random())
-
-			face = facet(pts[0], pts[1], pts[2], c)
-			facets.append(face)
-
-		elif line.startswith('#'): continue
-		else: continue 
-	objFile.close()
-	return facets
-
-
 def main(argc, argv):
 	#write some generic objects to test .obj file formats
 	writeObj("cylinder", 15)
 	writeObj("cube")
-	writeObj("sphere", 15)
+	writeObj("sphere", 5)
 	writeObj("torus", 15)
 
 

@@ -4,9 +4,10 @@
 # shapes.py
 
 import sys
+import numpy as np
 from geometry import point, vector, EPSILON, ORIGIN
 from quat import quat
-from objects import facet, color
+from objects import *
 from objgen import *
 from random import random
 from math import sin, cos, acos, pi, sqrt
@@ -15,7 +16,14 @@ from OpenGL.GLUT import *
 from OpenGL.GL import *
 
 trackball = None
+light = None
 facets = None
+xStart = 0
+yStart = 0
+width = 360
+height = 360
+scale = 1.0/360.0
+cam = None
 
 
 def drawScene():
@@ -42,11 +50,21 @@ def drawScene():
 	# Draw all the triangular facets.
 	glBegin(GL_TRIANGLES)
 	for f in facets:
-			glColor3f(f.material.red, f.material.green, f.material.blue)
-			glVertex3fv(f[0].components()) 
-			glVertex3fv(f[1].components()) 
-			glVertex3fv(f[2].components()) 
+			glColor4f(f.material.red, f.material.green, f.material.blue, f.material.alpha)
+			# glColor4f(0.0, 0.0, 0.0, 0.0)
+			glVertex3fv(f.vertices[0].point.components()) 
+			glVertex3fv(f.vertices[1].point.components()) 
+			glVertex3fv(f.vertices[2].point.components()) 
 	glEnd()
+	for f in facets:
+		glBegin(GL_LINES)
+		for hedge in f.edges:
+			glColor4f(.8, .0, .2, 1.0)
+			dest = hedge.next.vsource.point
+			glVertex3fv(hedge.vsource.point.components()) 
+			glVertex3fv(dest.components()) 
+		glEnd()
+
 
 	# Render the scene.
 	glFlush()
@@ -58,6 +76,33 @@ def myKeyFunc(key, x, y):
 	if key == b'\033':	
 # "\033" is the Escape key
 			sys.exit(1)
+
+def facetSelect(btn, state, x, y):
+	global facets, trackball
+	
+	proj = glGetDoublev(GL_PROJECTION_MATRIX)
+	model = glGetDoublev(GL_MODELVIEW_MATRIX)
+	prod =  np.dot(model, proj)
+	iprod = np.linalg.inv(prod)
+	winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
+	
+	# cam.updateCam(iprod, x, y, winz)
+	xnew = (2.0*x / width) - 1.0
+	ynew = 1.0 - (2.0*y /height)
+	znew = 2.0*winz - 1.0
+	loc = point(xnew, ynew, znew)
+	cxyz = np.dot(iprod, [xnew, ynew, znew, 1.0])
+	camloc = point(cxyz[0], cxyz[1], cxyz[2])
+	vdir = loc.minus(camloc).neg().unit()
+	clickray = ray(camloc, vdir)
+	for facet in facets:
+		res = facet.intersect_ray(clickray)
+		if res is not None:
+			c = color(.8, .4, 0.8, 0.7);
+			facet.material = c;
+	glutPostRedisplay()
+
+
 
 
 def myArrowFunc(key, x, y):
@@ -87,15 +132,21 @@ def initRendering():
 	glEnable (GL_DEPTH_TEST)
 
 
-def resizeWindow(w, h):
-	""" Register a window resize by changing the viewport.  """
-	glViewport(0, 0, w, h)
-	glMatrixMode(GL_PROJECTION)
-	glLoadIdentity()
-	if w > h:
-			glOrtho(-w/h*2.0, w/h*5.0, -5.0, 5.0, -5.0, 5.0)
-	else:
-			glOrtho(-.2, .2, -h/w * .2, h/w * .2, -.2, .2)
+def resize(w, h):
+    """ Register a window resize by changing the viewport.  """
+    global width, height, scale
+    glViewport(0, 0, w, h)
+    width = w
+    height = h
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    r = 2.0
+    if w > h:
+        glOrtho(-w/h*r, w/h*r, -r, r, -r, r)
+        scale = 2.0 * r / h 
+    else:
+        glOrtho(-r, r, -h/w * r, h/w * r, -r, r)
+        scale = 2.0 * r / w 
 
 
 def main(argc, argv):
@@ -109,14 +160,18 @@ def main(argc, argv):
 		shape = argv[1]
 		smoothness = 10
 	else:
-		shape = "torus"
-		smoothness = 10
+		shape = "sphere"
+		smoothness = 15
 
 	#generate the .obj shapefile, and read it
 	shapeFile = shape + str(smoothness) + ".obj"
 	writeObj(str(shape), smoothness)
-	facets = readObjFile('lamp.obj')
+	s = surface()
+	s.readObjFile(shapeFile)
+	s.createHalfEdges()
 
+	facets = s.faces
+	# cam = camera()
 
 	#you can even extend facets to see the shapes overlaid
 	#facets.extend(readObjFile'torus.obj')
@@ -126,14 +181,15 @@ def main(argc, argv):
 	glutInit(argv)
 	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH)
 	glutInitWindowPosition(0, 20)
-	glutInitWindowSize(500, 500)
+	glutInitWindowSize(width, height)
 	glutCreateWindow( 'shapes - Press ESC to quit' )
 	initRendering()
 
 	# Register interaction callbacks.
 	glutKeyboardFunc(myKeyFunc)
 	glutSpecialFunc(myArrowFunc)
-	glutReshapeFunc(resizeWindow)
+	glutMouseFunc(facetSelect)
+	glutReshapeFunc(resize)
 	glutDisplayFunc(drawScene)
 
 	print()
