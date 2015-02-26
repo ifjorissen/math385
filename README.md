@@ -2,11 +2,23 @@
 #####Isabella Jorissen
 #####2.16.15
 
+##2.19.15:
+Half edge structure seems to be implemented correctly. I should probably write some tests for this.
+getNeighbors() enabled for neighbors which share an edge. See screencap `sphereNeighbor.png`
+
+##2.18.15:
+To do: projection using glFrustum instead of glOrtho
+* implement the half edges edge.twin.face & edge.twin.next (done!)
+*port this baby over to webGL 
+
+
 ##UPDATES as of 2.16.15:
 ###Known Bugs:
+  
   * If facets start at 1 instead of 0, you need to subtract 1 in the readObjFile function in objects.py
   * The sphere, torus, and cylinder have holes since the range is not inclusive in the outer loop
   * the click event does not correctly find the intersection of the facet and the ray due to improper calculations going into the xscreen, yscreen -> projection
+  * Numpy format handler module is not loaded in from opengl accelerate 
 
 ###To Do:
   * Fix known bugs
@@ -14,43 +26,48 @@
   * Testing for the half edges (esp testing twin attributes)
   * Make the vertex and face classes extensions of facet
 
-RayPicking: this is pretty close:
-  winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
-  xnew = (2*x / width) - 1.0
-  ynew = 1.0 - (2*y/height)
-  znew = 2.0*winz - 1.0
-  loc = point(xnew, ynew, znew)
 
-also works very well:
-  winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
-  xnew = (2.0*x / width) - 1.0
-  ynew = 1.0 - (2.0*y /height)
-  znew = 2.0*winz - 1.0
-  #locproj = np.dot(np.dot(proj, model), [xnew, ynew, znew, 1.0])
-  loc = point(xnew, ynew, znew)
-  # cam = np.dot(np.linalg.inv(proj), [xnew, ynew, -1.0, 1.0])
-  # camView = np.dot(np.linalg.inv(model), [cam[0], cam[1], -1.0 , 0.0])
-  cxyz = np.dot(iprod, [xnew, ynew, znew, 1.0])
-  camloc = point(cxyz[0], cxyz[1], cxyz[2])
-  vdir = loc.minus(camloc).neg().unit()
-  clickray = ray(loc, vdir)
+-RayPicking: this is pretty close:
+** problem: clicking outside of circle still leads to res
+** if you set ray to self.transloc, this is solved, but the intersections aren't always right
+  xnew = ((2*x) / width) - 1.0
+  ynew = 1.0 - ((2*y)/height)
+  znew = 2.0*z - 1.0
+  cxyz = numpy.dot(iprod, [xnew, ynew, znew, 1.0])
+  self.transloc = point(cxyz[0], cxyz[1], cxyz[2])
+  self.screenproj = point(xnew, ynew, znew)
+  self.dir = self.screenproj.minus(self.transloc).neg().unit()
+  self.ray = ray(self.screenproj, self.dir)
+-
+-also works very well:
+-  winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
+-  xnew = (2.0*x / width) - 1.0
+-  ynew = 1.0 - (2.0*y /height)
+-  znew = 2.0*winz - 1.0
+-  #locproj = np.dot(np.dot(proj, model), [xnew, ynew, znew, 1.0])
+-  loc = point(xnew, ynew, znew)
+-  cxyz = np.dot(iprod, [xnew, ynew, znew, 1.0])
+-  camloc = point(cxyz[0], cxyz[1], cxyz[2])
+-  vdir = loc.minus(camloc).neg().unit()
+-  clickray = ray(loc, vdir)
+-
+-a third option that is more correct??? but doesn't work as well
+-  winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
+-  # cam.updateCam(iprod, x, y, winz)
+-  xnew = (2.0*x / width) - 1.0
+-  ynew = 1.0 - (2.0*y /height)
+-  znew = 2.0*winz - 1.0
+-  # locproj = np.dot(np.dot(proj, model), [xnew, ynew, znew, 1.0])
+-  loc = point(xnew, ynew, znew)
+-  print("xyz: " + str(xnew) + " " + str(ynew) + " " + str(znew))
+-  print("loc: " + str(loc))
+-  # print("locproj: \n" + str(locproj))
+-  cxyz = np.dot(iprod, [xnew, ynew, -1.0, 1.0/znew])
+-  print("cxyz \n" + str(cxyz))
+-  camloc = point(cxyz[0], cxyz[1], cxyz[2])
+-  vdir = loc.minus(camloc).unit()
+-  clickray = ray(camloc, vdir)
 
-a third option that is more correct but doesn't work as well
-  winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
-  # cam.updateCam(iprod, x, y, winz)
-  xnew = (2.0*x / width) - 1.0
-  ynew = 1.0 - (2.0*y /height)
-  znew = 2.0*winz - 1.0
-  # locproj = np.dot(np.dot(proj, model), [xnew, ynew, znew, 1.0])
-  loc = point(xnew, ynew, znew)
-  print("xyz: " + str(xnew) + " " + str(ynew) + " " + str(znew))
-  print("loc: " + str(loc))
-  # print("locproj: \n" + str(locproj))
-  cxyz = np.dot(iprod, [xnew, ynew, -1.0, 1.0/znew])
-  print("cxyz \n" + str(cxyz))
-  camloc = point(cxyz[0], cxyz[1], cxyz[2])
-  vdir = loc.minus(camloc).unit()
-  clickray = ray(camloc, vdir)
 
 
 

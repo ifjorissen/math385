@@ -36,7 +36,7 @@ def genCube():
 
 def genSphere(smooth):
 	smoothness = smooth
-	radius = 2
+	radius =2
 	numPoints = 2*pi/smoothness
 	points=[]
 	facets=[]

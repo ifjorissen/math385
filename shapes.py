@@ -4,7 +4,6 @@
 # shapes.py
 
 import sys
-import numpy as np
 from geometry import point, vector, EPSILON, ORIGIN
 from quat import quat
 from objects import *
@@ -24,7 +23,10 @@ width = 360
 height = 360
 scale = 1.0/360.0
 cam = None
+radius = 0.0
 
+
+# def matInv(mat):
 
 def drawScene():
 	""" Issue GL calls to draw the scene. """
@@ -78,32 +80,29 @@ def myKeyFunc(key, x, y):
 			sys.exit(1)
 
 def facetSelect(btn, state, x, y):
-	global facets, trackball
-	
+	global facets, cam
+	#get the transformation matrices
 	proj = glGetDoublev(GL_PROJECTION_MATRIX)
 	model = glGetDoublev(GL_MODELVIEW_MATRIX)
-	prod =  np.dot(model, proj)
-	iprod = np.linalg.inv(prod)
-	winz = glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
-	
-	# cam.updateCam(iprod, x, y, winz)
-	xnew = (2.0*x / width) - 1.0
-	ynew = 1.0 - (2.0*y /height)
-	znew = 2.0*winz - 1.0
-	loc = point(xnew, ynew, znew)
-	cxyz = np.dot(iprod, [xnew, ynew, znew, 1.0])
-	camloc = point(cxyz[0], cxyz[1], cxyz[2])
-	vdir = loc.minus(camloc).neg().unit()
-	clickray = ray(camloc, vdir)
+	cam.updateCam(proj, model, x, y, width, height)
+	clickray = cam.getRay()
+
+	#for every facet, check to see if there's an intersection
 	for facet in facets:
 		res = facet.intersect_ray(clickray)
 		if res is not None:
-			c = color(.8, .4, 0.8, 0.7);
-			facet.material = c;
+			print("res: " + str(res))
+			#only color the facet closest to ray.source
+			#to do: make this the min of all res[1]
+			if res[1] <= radius:
+				c = color(.8, .4, 0.8, 0.7)
+				facet.material = c
+				facet.findNeighbors()
 	glutPostRedisplay()
 
-
-
+# def processMouse(btn, state, x, y):
+def sliceDir(x, y):
+	print('slice dir called')
 
 def myArrowFunc(key, x, y):
 	""" Handle a "special" keypress. """
@@ -140,7 +139,8 @@ def resize(w, h):
     height = h
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    r = 2.0
+    r = radius
+    print("resize called")
     if w > h:
         glOrtho(-w/h*r, w/h*r, -r, r, -r, r)
         scale = 2.0 * r / h 
@@ -150,7 +150,7 @@ def resize(w, h):
 
 
 def main(argc, argv):
-	global trackball, facets
+	global trackball, facets, cam, radius
 
 	#read in input
 	if argc is 3:
@@ -160,7 +160,7 @@ def main(argc, argv):
 		shape = argv[1]
 		smoothness = 10
 	else:
-		shape = "sphere"
+		shape = "bunny"
 		smoothness = 15
 
 	#generate the .obj shapefile, and read it
@@ -171,7 +171,8 @@ def main(argc, argv):
 	s.createHalfEdges()
 
 	facets = s.faces
-	# cam = camera()
+	radius = 2.0
+	cam = camera()
 
 	#you can even extend facets to see the shapes overlaid
 	#facets.extend(readObjFile'torus.obj')
@@ -189,6 +190,7 @@ def main(argc, argv):
 	glutKeyboardFunc(myKeyFunc)
 	glutSpecialFunc(myArrowFunc)
 	glutMouseFunc(facetSelect)
+	glutMotionFunc(sliceDir)
 	glutReshapeFunc(resize)
 	glutDisplayFunc(drawScene)
 

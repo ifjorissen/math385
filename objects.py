@@ -4,8 +4,8 @@
 # Defines an RGB struct 'class color'.
 # Defines a three-vertex struct 'class facet', that also has a color attribute.
 #
-
-import numpy as np
+import sys
+import numpy
 from constants import *
 from random import random
 from geometry import vector, point, ORIGIN
@@ -50,9 +50,10 @@ class vertex:
 		return edges
 
 class half_edge:
-	def __init__(self, source, edge):
+	def __init__(self, source, sourceid, edge):
 		self.twin  = None
 		self.next  = None
+		self.sid = sourceid
 		self.vsource = source
 		self.vedge  = edge
 		self.face  = None
@@ -81,6 +82,15 @@ class face:
 			self.edges = []
 		return self.edges
 
+	def findNeighbors(self):
+		neighbors = []
+		for edge in self.edges:
+			c = color(0.2, 0.8, 0.2, 0.7);
+			if edge.twin is not None:
+				edge.twin.face.material = c 
+				neighbors.append(edge.twin.face)
+		return neighbors
+
 	def normal(self):
 		h = self.edges[0]
 		if h.vedge.norm() < EPSILON:
@@ -89,9 +99,6 @@ class face:
 
 		if h.next.vedge.norm()<EPSILON:
 			h2 = h.next.next
-		
-		# print ("h: " + str(h.vsource.point))
-		# print ("h2: " + str(h2.vedge.components()))
 		return h.vedge.cross(h2.vedge)
 
 	def intersect_ray(self,obj):
@@ -154,16 +161,36 @@ class face:
 
 class camera:
 	def __init__(self):
-		self.origin = []
-		self.screenproj = []
-		self.dir = []
+		self.origin = [ORIGIN]
+		self.ray = None
 
-	def updateCam(self, mat, x, y, z):
+	def updateCam(self, proj, model, x, y, width, height):
 		#normalize coordinates
-		xnew = ((2*x) / width) - 1.0
-		ynew = 1.0 - ((2*y)/height)
-		znew = 2.0*winz - 1.0
-		cxyz = np.dot(iprod, [xnew, ynew, -1.0, 1.0/znew])
+		xnew = (2*x/width) - 1.0
+		ynew = 1.0 - (2*y/height)
+
+		#inverse projection matrix
+		iproj = numpy.linalg.inv(proj)
+
+		#convert near pt to worldspace(?) coordinates with iproj
+		#and apply the modelview transforms 
+		src = numpy.dot(iproj, [xnew, ynew, -1.0, 0.0])
+		src = numpy.dot(model, src)
+
+		#find the direction of the ray (originally going in the pure z direction)
+							 #after we apply the modelview matrix
+		comp = [0.0, 0.0, -1.0, 0.0]
+		vdir = numpy.dot(model, comp)
+							 
+		#update camera properties
+		#note that since it's an ortho projection the ray direction is the same regardless
+		#of where the click is (or, for that matter the cam origin)
+		src = point(src[0], src[1], src[2])
+		vdir = vector(vdir[0], vdir[1], vdir[2]).unit()
+		self.ray = ray(src, vdir)
+
+	def getRay(self):
+		return self.ray 
 
 class surface:
 	def __init__(self):
@@ -174,67 +201,98 @@ class surface:
 		self.vertices = []
 		self.filename = None
 
+	def twinEdges(self):
+		for key in self.HEDict.keys():
+			revkey = key[::-1]
+			vid1 = key[0]
+			vid2 = key[1]
+			he1 = self.HEDict[key]
+			if (vid2, vid1) in self.HEDict.keys():
+				he2 = self.HEDict[(vid2, vid1)]
+				he1.twin = he2
+				he2.twin = he1
+			# 	print("twins!" + str(key) + str(revkey))
+			# else:
+			# 	print("key pair not found for " + str(key))
+
 	def addToDict(self, vida, vidb, face):
 		verta = self.vertices[vida]
 		vertb = self.vertices[vidb]
 
+		#create vector going from verta to vertb
 		vab = verta.point.minus(vertb.point)
-		vba = vertb.point.minus(verta.point)
 
-		e = half_edge(verta, vab)
-		etwin = half_edge(vertb, vba)
+		#make a halfedge
+		e = half_edge(verta, vida, vab)
+
+		#assign the current face to e
 		e.face = face
-		e.twin = etwin
 
-		if verta.hedge is None:
-			verta.hedge = etwin
 		if vertb.hedge is None:
 			vertb.hedge = e
 
+		#add the edge to the dictionary
 		self.HEDict[(vida, vidb)] = e
-		self.HEDict[(vidb, vida)] = etwin
 
-	def updateDict(self, face):
+	def updateDict(self, face, i):
 		vid1 = face.verts[0]
 		vid2 = face.verts[1]
 		vid3 = face.verts[2]
-		if (vid1, vid2) in self.HEDict:
-			e = self.HEDict[(vid1, vid2)]
-			if e.face is None:
-				e.face = face
+		#this is an even face, and a top face
+		#so we go counter clockwise
+		if i % 2 is 0:
+			if (vid1, vid2) not in self.HEDict.keys():
+				self.addToDict(vid1, vid2, face) 
 
+			if (vid2, vid3) not in self.HEDict.keys():
+				self.addToDict(vid2, vid3, face)
+
+			if (vid3, vid1) not in self.HEDict.keys():
+				self.addToDict(vid3, vid1, face)
+
+			#set all of the .next attributes of each half edge
+			self.HEDict[(vid1, vid2)].next = self.HEDict[(vid2, vid3)]
+			self.HEDict[(vid2, vid3)].next = self.HEDict[(vid3, vid1)]
+			self.HEDict[(vid3, vid1)].next = self.HEDict[(vid1, vid2)]
+
+			if face.hedge is None:
+				face.hedge = self.HEDict[(vid1, vid2)]
+
+		#odd face, we want to go clockwise with edges
 		else:
-			self.addToDict(vid1, vid2, face) 
+			if (vid2, vid1) not in self.HEDict.keys():
+				self.addToDict(vid2, vid1, face) 
 
-		if (vid2, vid3) in self.HEDict:
-			e = self.HEDict[(vid2, vid3)]
-			if e.face is None:
-				e.face = face
-		else: 
-			self.addToDict(vid2, vid3, face)
+			if (vid3, vid2) not in self.HEDict.keys():
+				self.addToDict(vid3, vid2, face)
 
-		if (vid3, vid1) in self.HEDict:
-			e = self.HEDict[(vid3, vid1)]
-			if e.face is None:
-				e.face = face
-		else:
-			#create this he and its twin
-			self.addToDict(vid3, vid1, face)
+			if (vid1, vid3) not in self.HEDict.keys():
+				self.addToDict(vid1, vid3, face)
 
-		#set all of the .next attributes of each half edge
-		self.HEDict[(vid1, vid2)].next = self.HEDict[(vid2, vid3)]
-		self.HEDict[(vid2, vid3)].next = self.HEDict[(vid3, vid1)]
-		self.HEDict[(vid3, vid1)].next = self.HEDict[(vid1, vid2)]
+			#set all of the .next attributes of each half edge
+			self.HEDict[(vid2, vid1)].next = self.HEDict[(vid3, vid2)]
+			self.HEDict[(vid3, vid2)].next = self.HEDict[(vid1, vid3)]
+			self.HEDict[(vid1, vid3)].next = self.HEDict[(vid2, vid1)]
 
-		if face.hedge is None:
-			face.hedge = self.HEDict[(vid1, vid2)]
-			face.get_edges()
+			if face.hedge is None:
+				face.hedge = self.HEDict[(vid2, vid1)]
 
 		return 
 
 	def createHalfEdges(self):
+		#creates every half edge 
+		for i in range(0, len(self.faces)):
+			self.updateDict(self.faces[i], i)
+
+		self.twinEdges()
+
 		for face in self.faces:
-			self.updateDict(face)
+			face.get_edges()
+
+	def test(self):
+		for key in self.HEDict.keys():
+			print("key: " + str(key) + " val: " + str(self.HEDict[key]))
+		return
 
 	def readObjFile(self, fileS):
 		self.filename = fileS
@@ -261,8 +319,6 @@ class surface:
 				c = color(0.0, 0.0, 0.0, 1.0)
 				f = face(pts[0], pts[1], pts[2], c)
 				f.identify(ids[0], ids[1], ids[2])
-				# fac = facet(f, c)
-				# self.facets.append(fac)
 				self.faces.append(f)
 
 			elif line.startswith('#'): continue
